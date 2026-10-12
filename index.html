@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Интервью</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #fff; --text: #1d2129; --muted: #6b7280;
+    --line: #d9dce1; --accent: #2f5fd0; --accent-text: #fff; --danger: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14161a; --panel: #1e2127; --text: #e6e8eb; --muted: #9aa0a9; --line: #343944; --accent: #5b86ee; --accent-text: #0b1020; --danger: #ef6a5b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, sans-serif; }
+  header { padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0 16px 0 0; }
+  .tab { border: 0; background: none; color: var(--muted); padding: 8px 12px; border-radius: 8px; cursor: pointer; font: inherit; }
+  .tab.active { background: var(--bg); color: var(--text); font-weight: 600; }
+  main { max-width: 900px; margin: 0 auto; padding: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  input[type=number], input[type=text], textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  input[type=number] { width: 100px; }
+  input[type=color] { width: 56px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+  textarea { width: 100%; min-height: 70px; resize: vertical; }
+  button.btn { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+  button.btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button.btn.danger { color: var(--danger); }
+  .item-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .hidden { display: none !important; }
+  .swatch { width: 100%; height: 90px; border-radius: 8px; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; text-align: center; padding: 8px; overflow: hidden; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  td, th { border-bottom: 1px solid var(--line); padding: 6px; text-align: left; }
+  #stage { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; text-align: center; padding: 6vw; white-space: pre-wrap; cursor: none; user-select: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Интервью</h1>
+  <button class="tab active" data-tab="setup">Настройка</button>
+  <button class="tab" data-tab="results">Результаты</button>
+  <button class="tab" data-tab="analysis">Анализ</button>
+</header>
+
+<main>
+  <section id="tab-setup">
+    <div class="card">
+      <div class="row">
+        <label>Цвет стимула (фон ответа)<input type="color" id="stimColor"></label>
+        <label>Цвет текста вопроса<input type="color" id="textColor"></label>
+        <label>Размер текста, px (при 1080p)<input type="number" id="fontSize" min="16" max="200"></label>
+        <label>Ширина PNG<input type="number" id="imgW" min="320" max="7680"></label>
+        <label>Высота PNG<input type="number" id="imgH" min="240" max="4320"></label>
+      </div>
+      <p class="muted" style="margin-bottom:0">Ход: читается вопрос → <b>пробел</b> → пустой стимул, устный ответ → <b>пробел</b> → следующий вопрос. <b>Esc</b> — прервать.</p>
+    </div>
+
+    <div id="items"></div>
+
+    <div class="row" style="margin-bottom:12px">
+      <button class="btn" id="addBtn">+ Добавить стимул</button>
+      <button class="btn primary" id="startBtn">▶ Запустить интервью</button>
+      <button class="btn" id="zipBtn">⬇ Скачать PNG (ZIP)</button>
+    </div>
+  </section>
+
+  <section id="tab-results" class="hidden">
+    <div class="card">
+      <p class="muted" id="resEmpty">Пока нет данных. Запустите интервью.</p>
+      <table id="resTable" class="hidden">
+        <thead><tr><th>#</th><th>Вопрос</th><th>Чтение, с</th><th>Ответ, с</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="csvBtn">⬇ CSV</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-analysis" class="hidden">
+    <div class="card">
+      <h2 style="margin-top:0">Модуль анализа</h2>
+      <p class="muted">В разработке.</p>
+    </div>
+  </section>
+</main>
+
+<div id="stage" class="hidden"></div>
+
+<script>
+'use strict';
+const KEY = 'interview-app-v1';
+const $ = (s) => document.querySelector(s);
+const state = load() || {
+  stimColor: '#e6e6e6', textColor: '#222222', fontSize: 64, imgW: 1920, imgH: 1080,
+  items: [{ q: '' }],
+};
+let lastRun = null;
+
+function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
+
+// ---------- настройка ----------
+function bindSettings() {
+  for (const [id, key, num] of [['stimColor','stimColor'],['textColor','textColor'],['fontSize','fontSize',1],['imgW','imgW',1],['imgH','imgH',1]]) {
+    const el = $('#' + id); el.value = state[key];
+    el.addEventListener('input', () => { state[key] = num ? (+el.value || state[key]) : el.value; save(); renderItems(); });
+  }
+}
+function renderItems() {
+  const box = $('#items'); box.innerHTML = '';
+  state.items.forEach((it, i) => {
+    const d = document.createElement('div'); d.className = 'card';
+    d.innerHTML = `<div class="item-head"><span>Стимул ${i + 1}</span><button class="btn danger" ${state.items.length < 2 ? 'disabled' : ''}>Удалить</button></div>
+      <label>Вопрос / инструкция<textarea placeholder="Введите вопрос…"></textarea></label>
+      <div class="muted" style="margin:8px 0 4px">Экран ответа:</div>
+      <div class="swatch" style="background:${state.stimColor}"></div>`;
+    const ta = d.querySelector('textarea'); ta.value = it.q;
+    ta.addEventListener('input', () => { it.q = ta.value; save(); });
+    d.querySelector('button').addEventListener('click', () => { state.items.splice(i, 1); save(); renderItems(); });
+    box.appendChild(d);
+  });
+}
+$('#addBtn').addEventListener('click', () => {
+  state.items.push({ q: '' }); save(); renderItems();
+  const t = document.querySelectorAll('#items textarea'); t[t.length - 1].focus();
+});
+
+// ---------- вкладки ----------
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));
+  for (const n of ['setup','results','analysis']) $('#tab-' + n).classList.toggle('hidden', n !== b.dataset.tab);
+}));
+
+// ---------- прогон ----------
+const stage = $('#stage');
+let run = null;
+
+function filled() { return state.items.filter(it => it.q.trim()); }
+
+$('#startBtn').addEventListener('click', () => {
+  const items = filled();
+  if (!items.length) { alert('Введите хотя бы один вопрос.'); return; }
+  run = { items, i: 0, phase: 'question', t: performance.now(), log: [] };
+  stage.classList.remove('hidden');
+  if (stage.requestFullscreen) stage.requestFullscreen().catch(() => {});
+  draw();
+});
+
+function draw() {
+  const scale = Math.min(innerWidth / state.imgW, innerHeight / state.imgH);
+  if (run.phase === 'question') {
+    stage.style.background = state.stimColor;
+    stage.style.color = state.textColor;
+    stage.style.fontSize = (state.fontSize * innerHeight / 1080) + 'px';
+    stage.textContent = run.items[run.i].q;
+  } else {
+    stage.style.background = state.stimColor;
+    stage.textContent = '';
+  }
+}
+
+function finish(aborted) {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  stage.classList.add('hidden');
+  if (run) { lastRun = run.log; renderResults(); }
+  run = null;
+  if (!aborted) document.querySelector('[data-tab=results]').click();
+}
+
+addEventListener('keydown', (e) => {
+  if (!run) return;
+  if (e.key === 'Escape') { finish(true); return; }
+  if (e.code !== 'Space') return;
+  e.preventDefault();
+  if (e.repeat) return;
+  const now = performance.now();
+  const entry = run.log[run.i] || (run.log[run.i] = { q: run.items[run.i].q });
+  if (run.phase === 'question') {
+    entry.read = (now - run.t) / 1000; run.phase = 'answer';
+  } else {
+    entry.answer = (now - run.t) / 1000; run.phase = 'question'; run.i++;
+    if (run.i >= run.items.length) { run.t = now; finish(false); return; }
+  }
+  run.t = now; draw();
+});
+document.addEventListener('fullscreenchange', () => { if (run && !document.fullscreenElement) finish(true); });
+
+// ---------- результаты ----------
+function renderResults() {
+  const rows = (lastRun || []).filter(Boolean);
+  $('#resEmpty').classList.toggle('hidden', rows.length > 0);
+  $('#resTable').classList.toggle('hidden', !rows.length);
+  const tb = $('#resTable tbody'); tb.innerHTML = '';
+  rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    for (const v of [i + 1, r.q, r.read?.toFixed(2) ?? '', r.answer?.toFixed(2) ?? '']) {
+      const td = document.createElement('td'); td.textContent = v; tr.appendChild(td);
+    }
+    tb.appendChild(tr);
+  });
+}
+$('#csvBtn').addEventListener('click', () => {
+  const rows = (lastRun || []).filter(Boolean);
+  if (!rows.length) return;
+  const esc = (s) => '"' + String(s).replace(/"/g, '""') + '"';
+  const csv = 'stimulus,question,read_sec,answer_sec\n' + rows.map((r, i) => [i + 1, esc(r.q), r.read?.toFixed(3) ?? '', r.answer?.toFixed(3) ?? ''].join(',')).join('\n');
+  download(new Blob(['﻿' + csv], { type: 'text/csv' }), 'interview_results.csv');
+});
+
+// ---------- PNG + ZIP ----------
+function wrapLines(ctx, text, maxW) {
+  const out = [];
+  for (const para of text.split('\n')) {
+    let line = '';
+    for (const word of para.split(/\s+/).filter(Boolean)) {
+      const test = line ? line + ' ' + word : word;
+      if (line && ctx.measureText(test).width > maxW) { out.push(line); line = word; } else line = test;
+    }
+    out.push(line);
+  }
+  return out;
+}
+function render(text) {
+  const c = document.createElement('canvas'); c.width = state.imgW; c.height = state.imgH;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = state.stimColor; ctx.fillRect(0, 0, c.width, c.height);
+  if (text) {
+    const fs = state.fontSize * c.height / 1080;
+    ctx.fillStyle = state.textColor; ctx.font = `${fs}px system-ui, "Segoe UI", Arial, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const lines = wrapLines(ctx, text, c.width * 0.84), lh = fs * 1.35;
+    lines.forEach((l, i) => ctx.fillText(l, c.width / 2, c.height / 2 + (i - (lines.length - 1) / 2) * lh));
+  }
+  return new Promise(res => c.toBlob(res, 'image/png'));
+}
+
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+
+function makeZip(files) { // files: [{name, data:Uint8Array}], без сжатия (PNG уже сжат)
+  const enc = new TextEncoder(), parts = [], central = [];
+  const d = new Date(), time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1),
+        date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  let off = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), crc = crc32(f.data), size = f.data.length;
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+    lh.setUint16(10, time, true); lh.setUint16(12, date, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, size, true); lh.setUint32(22, size, true); lh.setUint16(26, name.length, true);
+    parts.push(new Uint8Array(lh.buffer), name, f.data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
+    ch.setUint16(12, time, true); ch.setUint16(14, date, true);
+    ch.setUint32(16, crc, true); ch.setUint32(20, size, true); ch.setUint32(24, size, true); ch.setUint16(28, name.length, true);
+    ch.setUint32(42, off, true);
+    central.push(new Uint8Array(ch.buffer), name);
+    off += 30 + name.length + size;
+  }
+  const csize = central.reduce((s, p) => s + p.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, csize, true); end.setUint32(16, off, true);
+  return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/zip' });
+}
+
+$('#zipBtn').addEventListener('click', async () => {
+  const items = filled();
+  if (!items.length) { alert('Введите хотя бы один вопрос.'); return; }
+  const files = [], pad = String(items.length).length < 2 ? 2 : String(items.length).length;
+  for (let i = 0; i < items.length; i++) {
+    const n = String(i + 1).padStart(pad, '0');
+    files.push({ name: `interview_${n}_question.png`, data: new Uint8Array(await (await render(items[i].q)).arrayBuffer()) });
+    files.push({ name: `interview_${n}_stimulus_blank.png`, data: new Uint8Array(await (await render('')).arrayBuffer()) });
+  }
+  download(makeZip(files), 'interview_stimuli.zip');
+});
+
+function download(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+bindSettings(); renderItems();
+</script>
+</body>
+</html>
